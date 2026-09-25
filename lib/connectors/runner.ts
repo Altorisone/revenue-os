@@ -6,6 +6,8 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { registry } from './types'
 import { ConnectorContext } from './types'
 import { processJobObservations } from '@/lib/signals/job-processor'
+import { runDueDiscoverySearches } from '@/lib/connectors/google-news-discovery'
+import { runJobboardDiscovery } from '@/lib/connectors/jobboard-discovery'
 
 // Import connectors to register them
 import '@/lib/connectors/career-page'
@@ -181,6 +183,37 @@ export async function processQueue(projectId?: string): Promise<{
     await sleep(500)
   }
 
+    // ── Discovery: find new candidate companies ──────────────────────────────
+  let discoveryProjectIds: string[]
+  if (projectId) {
+    discoveryProjectIds = [projectId]
+  } else {
+    const { data: dueSearches } = await supabase
+      .from('discovery_searches')
+      .select('project_id')
+      .eq('enabled', true)
+      .lte('next_run_at', new Date().toISOString())
+    discoveryProjectIds = [...new Set((dueSearches ?? []).map((s: { project_id: string }) => s.project_id))]
+  }
+  for (const pid of discoveryProjectIds) {
+    try {
+      const disc = await runDueDiscoverySearches(supabase, pid)
+      if (disc.searchesRun > 0) {
+        console.log(`[runner] Discovery: ${disc.searchesRun} searches, ${disc.candidatesCreated} new candidates`)
+      }
+    } catch (err) {
+      console.error('[runner] Discovery error:', err)
+    }
+    try {
+      const jb = await runJobboardDiscovery(supabase, pid)
+      if (jb.jobsScanned > 0) {
+        console.log(`[runner] Jobboard: ${jb.jobsScanned} jobs scanned, ${jb.candidatesCreated} new candidates`)
+      }
+    } catch (err) {
+      console.error('[runner] Jobboard discovery error:', err)
+    }
+  }
+  
   return stats
 }
 
