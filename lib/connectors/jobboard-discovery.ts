@@ -58,11 +58,12 @@ async function fetchFeed(url: string, source: string): Promise<JobPosting[]> {
 
 async function fetchJobboardResults(query: string): Promise<JobPosting[]> {
   const q = encodeURIComponent(query)
-  const [stepstone, indeed] = await Promise.all([
+  const [stepstone, indeed, xing] = await Promise.all([
     fetchFeed(`https://www.stepstone.de/rss/alle-jobs/?q=${q}&where=Deutschland&radius=100`, 'Stepstone'),
     fetchFeed(`https://de.indeed.com/rss?q=${q}&l=Deutschland&sort=date&fromage=14`, 'Indeed'),
+    fetchFeed(`https://www.xing.com/jobs/search/rss?q=${q}&location=Deutschland`, 'Xing'),
   ])
-  return [...stepstone, ...indeed]
+  return [...stepstone, ...indeed, ...xing]
 }
 
 function normalizeCompanyName(name: string): string {
